@@ -106,6 +106,15 @@ namespace // anonymous namespace for local functions
     _holeFilledMesh = nil;
 }
 
+- (void)resetSLAMKeepMeshes
+{
+    _slamState.prevFrameTimeStamp = -1.0;
+    [_slamState.mapper reset];
+    [_slamState.tracker reset];
+    [_slamState.scene clear];
+    [_slamState.keyFrameManager clear];
+}
+
 - (void)clearSLAM
 {
     _slamState.initialized = false;

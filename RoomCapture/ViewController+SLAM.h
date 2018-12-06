@@ -18,6 +18,7 @@
 
 - (void)setupSLAM;
 - (void)resetSLAM;
+- (void)resetSLAMKeepMeshes;
 - (void)clearSLAM;
 - (void)setupMapper;
 - (void)processDepthFrame:(STDepthFrame *)depthFrame

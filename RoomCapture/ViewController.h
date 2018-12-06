@@ -8,6 +8,7 @@
 #import <AVFoundation/AVFoundation.h>
 #define HAS_LIBCXX
 #import <Structure/Structure.h>
+#import "MeshRenderer.h"
 
 #import "CalibrationOverlay.h"
 #import "MeshViewController.h"
@@ -61,6 +62,9 @@ enum RoomCaptureState
     
     // Scanning
     RoomCaptureStateScanning,
+    
+    // diminish
+    RoomCaptureDiminish,
     
     // Finalizing the mesh
     RoomCaptureStateFinalizing,
@@ -193,6 +197,9 @@ struct DisplayData
     
     STMesh *_colorizedMesh;
     STMesh *_holeFilledMesh;
+    STMesh *meshRef;
+    
+    MeshRenderer *_meshRenderer;
     
     // Most recent gravity vector from IMU.
     GLKVector3 _lastCoreMotionGravity;

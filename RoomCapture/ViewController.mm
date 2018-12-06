@@ -9,6 +9,7 @@
 #import "ViewController+OpenGL.h"
 #import "ViewController+Sensor.h"
 #import "ViewController+SLAM.h"
+#import "MeshRenderer.h"
 
 #import <Structure/Structure.h>
 #import <Structure/StructureSLAM.h>
@@ -101,6 +102,7 @@
     // Make sure the status bar is hidden.
     [[UIApplication sharedApplication] setStatusBarHidden:YES withAnimation:UIStatusBarAnimationSlide];
     
+    // make round button
     self.diminishButton.layer.cornerRadius = 5.0;
     
     // Fully transparent message label, initially.
@@ -194,6 +196,7 @@
     self.scanButton.hidden = YES;
     self.doneButton.hidden = YES;
     self.resetButton.hidden = YES;
+    self.diminishButton.hidden = YES;
     
     // Stop the sensors, we don't need them.
     [_sensorController stopStreaming];
@@ -202,7 +205,7 @@
     // Tell the mapper to compute a final triangle mesh from its data. Will also stop background processing.
     [_slamState.mapper finalizeTriangleMesh];
     
-    _slamState.roomCaptureState = RoomCaptureStateFinalizing;
+    _slamState.roomCaptureState = RoomCaptureDiminish;
     
     // Colorize the mesh in a background queue.
     [self colorizeMeshInBackground];
@@ -255,14 +258,54 @@
                                               _appStatus.backgroundProcessingStatus = AppStatus::BackgroundProcessingStatusIdle;
                                               _appStatus.statusMessageDisabled = true;
                                               [self updateAppStatusMessage];
+                                              if (_slamState.roomCaptureState == RoomCaptureStateScanning) {
+                                                  [self enterViewingState];
+                                              }
+                                              else {
+                                                  [self initializeDiminishedState];
+                                              }
                                               
-                                              [self enterViewingState];
                                           });
                                       }
                                       options:@{kSTColorizerTypeKey: @(STColorizerTextureMapForRoom) }
                                       error:nil];
     
     [colorizeTask start];
+}
+
+- (void) initializeDiminishedState
+{
+    // reset everything and start streaming again
+    // from meshViewDidDismiss
+    
+    // Restart the sensor.
+    [self connectToStructureSensorAndStartStreaming];
+    
+    _appStatus.statusMessageDisabled = false;
+    [self updateAppStatusMessage];
+    
+    // Reset the tracker, mapper, etc.
+    [self resetSLAMKeepMeshes];
+    [self enterPoseInitializationState];
+    
+    [self setColorCameraParametersForInit];
+    
+    /*_slamState.roomCaptureState = RoomCaptureStatePoseInitialization;
+    
+    [self updateIdleTimer];
+    
+    // Create a mapper.
+    [self setupMapper];
+    
+    // Set the initial tracker camera pose.
+    _slamState.tracker.initialCameraPose = _slamState.cameraPoseInitializer.cameraPose;
+    
+    // We will lock exposure during scanning to ensure better coloring.
+    [self setColorCameraParametersForScanning];
+    
+    _slamState.roomCaptureState = RoomCaptureStateScanning;*/
+    
+    
 }
 
 - (void)enterViewingState
@@ -286,6 +329,10 @@
 
 - (void)savePreviewImage:(NSString*)screenshotPath
 {
+    meshRef = [[STMesh alloc] initWithMesh:_colorizedMesh];
+    _meshRenderer->initializeGL();
+    _meshRenderer->uploadMesh(meshRef);
+    
     const int width = 320;
     const int height = 240;
     
@@ -318,7 +365,7 @@
     
     // Take the screenshot from the initial viewpoint, before user interactions.
     bool isInvertible = false;
-    GLKMatrix4 modelViewMatrix = GLKMatrix4Invert(_cameraPoseBeforeUserInteractions, &isInvertible);
+    GLKMatrix4 modelViewMatrix = GLKMatrix4Invert([_slamState.tracker lastFrameCameraPose], &isInvertible);
     NSAssert (isInvertible, @"Bad viewpoint.");
     GLKMatrix4 projectionMatrix = glProjectionMatrixFromPerspective(_cameraFovBeforeUserInteractions, _cameraAspectRatioBeforeUserInteractions);
     
@@ -326,11 +373,11 @@
     MeshRenderer::RenderingMode previousRenderingMode = _meshRenderer->getRenderingMode();
     
     // Screenshot rendering mode, always use colors if possible.
-    if ([self.meshRef hasPerVertexColors])
+    if ([meshRef hasPerVertexColors])
     {
         _meshRenderer->setRenderingMode( MeshRenderer::RenderingModePerVertexColor );
     }
-    else if ([self.meshRef hasPerVertexUVTextureCoords] && [self.meshRef meshYCbCrTexture])
+    else if ([self->meshRef hasPerVertexUVTextureCoords] && [self->meshRef meshYCbCrTexture])
     {
         _meshRenderer->setRenderingMode( MeshRenderer::RenderingModeTextured );
     }
@@ -632,7 +679,7 @@
 }
 
 - (IBAction)diminishButtonPressed:(id)sender {
-    [self enterDiminishedState]
+    [self enterDiminishedState];
 }
 
 #pragma mark - MeshViewController delegates
