@@ -6,9 +6,12 @@
 
 #import "ViewController.h"
 #import "ViewController+OpenGL.h"
+#import "EAGLView.h"
 
 #include <cmath>
 #include <limits>
+
+GLKMatrix4 cameraGLProjectionLast, cameraViewpointLast;
 
 @implementation ViewController (OpenGL)
 
@@ -175,9 +178,9 @@
     
     glViewport (_display.viewport[0], _display.viewport[1], _display.viewport[2], _display.viewport[3]);
     
-    switch (_slamState.roomCaptureState)
+    switch (_slamState.appState)
     {
-        case RoomCaptureStatePoseInitialization:
+        case StatePoseInitialization:
         {
             // Render the background image from the color camera.
             [self renderColorImage];
@@ -188,7 +191,7 @@
             break;
         }
             
-        case RoomCaptureStateScanning:
+        case StateScanning:
         {
             // Render the background image from the color camera.
             [self renderColorImage];
@@ -211,9 +214,33 @@
                                             wireframe:true];
             break;
         }
+        case StateDiminish:
+        {
+            // Render the background image from the color camera.
+            [self renderColorImage];
             
-            // MeshViewerController handles this.
-        case RoomCaptureStateViewing:
+            GLKMatrix4 depthCameraPose = [_slamState.tracker lastFrameCameraPose];
+            GLKMatrix4 cameraGLProjection = _display.colorCameraGLProjectionMatrix;
+            
+            // In case we are not using registered depth.
+            GLKMatrix4 colorCameraPoseInDepthCoordinateSpace;
+            [depthFrame colorCameraPoseInDepthCoordinateFrame:colorCameraPoseInDepthCoordinateSpace.m];
+            
+            // colorCameraPoseInWorld
+            GLKMatrix4 cameraViewpoint = GLKMatrix4Multiply(depthCameraPose, colorCameraPoseInDepthCoordinateSpace);
+            
+            cameraViewpointLast = cameraViewpoint;
+            cameraGLProjectionLast = cameraGLProjection;
+            
+            // Render the current mesh reconstruction using the last estimated camera pose.
+            /*[_slamState.scene renderMeshFromViewpoint:cameraViewpoint
+                                   cameraGLProjection:cameraGLProjection
+                                                alpha:1.0
+                             highlightOutOfRangeDepth:false
+                                            wireframe:false];*/
+            break;
+        }
+            
         default: {}
     };
     
@@ -287,6 +314,16 @@
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     [_display.rgbaTextureShader useShaderProgram];
     [_display.rgbaTextureShader renderTexture:GL_TEXTURE2];
+}
+
+-(GLKMatrix4) getCameraGLProjection
+{
+    return cameraGLProjectionLast;
+}
+
+-(GLKMatrix4) getCameraViewPoint
+{
+    return cameraViewpointLast;
 }
 
 @end

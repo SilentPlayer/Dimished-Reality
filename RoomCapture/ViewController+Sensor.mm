@@ -73,7 +73,7 @@
         return;
     
     // Reset the scan on disconnect, since we won't be able to recover afterwards.
-    if (_slamState.roomCaptureState == RoomCaptureStateScanning)
+    if (_slamState.appState == StateScanning)
     {
         [self resetButtonPressed:self];
     }
@@ -141,7 +141,7 @@
     NSError *error = nil;
         
     // We will use color for tracking and rendering, so let's use registered depth.
-    STStreamConfig structureStreamConfig = _options.useHardwareRegisteredDepth ? STStreamConfigRegisteredDepth320x240 : STStreamConfigDepth320x240;
+    STStreamConfig structureStreamConfig = _options.useHardwareRegisteredDepth ? STStreamConfigDepth320x240 : STStreamConfigDepth320x240;
     
     BOOL optionsAreValid = [_sensorController startStreamingWithOptions:@{
                                                                           kSTStreamConfigKey : @(structureStreamConfig),

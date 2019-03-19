@@ -8,10 +8,11 @@
 #import <AVFoundation/AVFoundation.h>
 #define HAS_LIBCXX
 #import <Structure/Structure.h>
+#import <Structure/StructureSLAM.h>
 #import "MeshRenderer.h"
+#import "ObjectDetection.h"
 
 #import "CalibrationOverlay.h"
-#import "MeshViewController.h"
 
 #include <vector>
 
@@ -25,7 +26,7 @@ struct Options
     
     // The minimal vertical volume size is fixed, since the ceiling is not likely to be very low.
     float minVerticalVolumeSize = 3.f;
-        
+    
     // The maximum of keyframes for keyFrameManager. More won't fit in a single OpenGL texture.
     int maxNumKeyframes = 48;
     
@@ -55,34 +56,32 @@ struct Options
     const bool applyExpensiveCorrectionToDepth = true;
 };
 
-enum RoomCaptureState
+enum State
 {
     // Defining the volume to scan
-    RoomCaptureStatePoseInitialization = 0,
+    StatePoseInitialization = 0,
     
     // Scanning
-    RoomCaptureStateScanning,
+    StateScanning,
     
     // diminish
-    RoomCaptureDiminish,
+    StateDiminish,
     
     // Finalizing the mesh
-    RoomCaptureStateFinalizing,
+    StateFinalizing,
     
-    // Visualizing the mesh
-    RoomCaptureStateViewing,
-    
-    RoomCaptureStateNumStates
+    StateNumStates
 };
 
 // SLAM-related members.
 struct SlamData
 {
-    RoomCaptureState roomCaptureState = RoomCaptureStatePoseInitialization;
+    State appState = StatePoseInitialization;
     bool initialized = false;
     
     NSTimeInterval prevFrameTimeStamp = -1.0;
     
+    GLKMatrix4 lastPose;
     STScene *scene = NULL;
     STTracker *tracker = NULL;
     STMapper *mapper = NULL;
@@ -100,7 +99,7 @@ struct AppStatus
     NSString* const needColorCameraAccessMessage = @"This app requires camera access to capture rooms.\nAllow access by going to Settings → Privacy → Camera.";
     NSString* const needCalibratedColorCameraMessage = @"This app requires an iOS device with a supported bracket.";
     
-    NSString* const finalizingMeshMessage = @"Finalizing model...";
+    NSString* const finalizingMeshMessage = @"Finalizing model... Hold still...";
     
     enum SensorStatus
     {
@@ -185,7 +184,7 @@ struct DisplayData
     GLKMatrix4 colorCameraGLProjectionMatrix = GLKMatrix4Identity;
 };
 
-@interface ViewController : UIViewController <STBackgroundTaskDelegate, MeshViewDelegate, AVCaptureVideoDataOutputSampleBufferDelegate, UIPopoverControllerDelegate, UIGestureRecognizerDelegate>
+@interface ViewController : UIViewController <STBackgroundTaskDelegate, AVCaptureVideoDataOutputSampleBufferDelegate, UIPopoverControllerDelegate, UIGestureRecognizerDelegate>
 {
     Options _options;
     
@@ -209,7 +208,6 @@ struct DisplayData
     
     // Mesh viewer controllers.
     UINavigationController *_meshViewNavigationController;
-    MeshViewController *_meshViewController;
     
     // IMU handling.
     CMMotionManager *_motionManager;
@@ -222,6 +220,7 @@ struct DisplayData
     CalibrationOverlay* _calibrationOverlay;
 }
 
+@property ObjectDetection *cdect;
 @property (nonatomic, retain) AVCaptureSession *avCaptureSession;
 @property (nonatomic, retain) AVCaptureDevice *videoDevice;
 
@@ -229,10 +228,17 @@ struct DisplayData
 @property (weak, nonatomic) IBOutlet UIButton *scanButton;
 @property (weak, nonatomic) IBOutlet UIButton *resetButton;
 @property (weak, nonatomic) IBOutlet UIButton *doneButton;
-@property (weak, nonatomic) IBOutlet UIButton *diminishButton;
 @property (weak, nonatomic) IBOutlet UILabel *trackingMessageLabel;
 @property (weak, nonatomic) IBOutlet UILabel *roomSizeLabel;
 @property (weak, nonatomic) IBOutlet UISlider *roomSizeSlider;
+@property (weak, nonatomic) IBOutlet UIImageView *imageView1;
+@property (weak, nonatomic) IBOutlet UIImageView *imageView2;
+@property (weak, nonatomic) IBOutlet UISwitch *switch1;
+@property (weak, nonatomic) IBOutlet UISwitch *switch2;
+@property (weak, nonatomic) IBOutlet UISwitch *switch3;
+@property (weak, nonatomic) IBOutlet UILabel *switch2Label;
+@property (weak, nonatomic) IBOutlet UILabel *switch1Label;
+@property (weak, nonatomic) IBOutlet UILabel *switch3Label;
 
 + (instancetype) viewController;
 
@@ -243,16 +249,22 @@ struct DisplayData
 - (IBAction)roomSizeSliderTouchDown:(id)sender;
 - (IBAction)roomSizeSliderTouchUpInside:(id)sender;
 - (IBAction)roomSizeSliderTouchUpOutside:(id)sender;
-- (IBAction)diminishButtonPressed:(id)sender;
+- (IBAction)switch2StateChange:(id)sender;
+- (IBAction)switch1StateChange:(id)sender;
+- (IBAction)switch3StateChange:(id)sender;
 
 - (void)enterPoseInitializationState;
 - (void)enterScanningState;
-- (void)enterViewingState;
 - (void)adjustVolumeSize:(GLKVector3)volumeSize;
 - (void)updateAppStatusMessage;
 - (BOOL)currentStateNeedsSensor;
 - (void)updateIdleTimer;
 - (void)showTrackingMessage:(NSString*)message;
 - (void)hideTrackingErrorMessage;
+- (UIImage *)getMeshImage;
+- (void) setViewImage: (UIImage *) image;
+-(bool) isStateDiminish;
+-(bool) switch1State;
+-(bool) switch2State;
 
 @end

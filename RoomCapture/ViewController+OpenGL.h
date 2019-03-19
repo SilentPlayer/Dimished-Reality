@@ -18,5 +18,7 @@
 - (void)setupGLViewport;
 - (void)uploadGLColorTexture:(STColorFrame*)colorFrame;
 - (void)renderSceneWithDepthFrame:(STDepthFrame*)depthFrame colorFrame:(STColorFrame*)colorFrame;
+- (GLKMatrix4) getCameraViewPoint;
+- (GLKMatrix4) getCameraGLProjection;
 
 @end

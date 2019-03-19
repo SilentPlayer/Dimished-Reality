@@ -12,12 +12,19 @@
         <placeholder placeholderIdentifier="IBFilesOwner" id="-1" userLabel="File's Owner" customClass="ViewController">
             <connections>
                 <outlet property="appStatusMessageLabel" destination="6ly-If-uZh" id="N1A-tf-yUE"/>
-                <outlet property="diminishButton" destination="qcn-fe-qe9" id="k1h-Vi-puP"/>
                 <outlet property="doneButton" destination="hrg-ff-rIb" id="UEc-xl-GpI"/>
+                <outlet property="imageView1" destination="bGe-MV-XyZ" id="pz0-5Z-N0X"/>
+                <outlet property="imageView2" destination="KN1-9f-J1f" id="o1Z-gn-VbY"/>
                 <outlet property="resetButton" destination="RfT-0h-QSo" id="iaF-8t-Snv"/>
                 <outlet property="roomSizeLabel" destination="CgP-p5-pMT" id="8cM-Js-ly9"/>
                 <outlet property="roomSizeSlider" destination="ZMm-ES-m1Y" id="7jV-WI-RWB"/>
                 <outlet property="scanButton" destination="Y9C-vE-QSA" id="dCm-Se-q6y"/>
+                <outlet property="switch1" destination="XFz-AP-uWd" id="c6w-bt-lzh"/>
+                <outlet property="switch1Label" destination="8hH-mX-stl" id="t5f-cE-HGk"/>
+                <outlet property="switch2" destination="WkJ-zf-beY" id="TWU-jn-j8I"/>
+                <outlet property="switch2Label" destination="NN0-c4-c9m" id="dMU-Hw-fFW"/>
+                <outlet property="switch3" destination="ZOQ-0J-wD0" id="haK-vP-5Ca"/>
+                <outlet property="switch3Label" destination="c6t-h9-3Ez" id="bmI-sO-WpU"/>
                 <outlet property="trackingMessageLabel" destination="8b4-Zl-yJD" id="U7K-8F-qVd"/>
                 <outlet property="view" destination="1" id="3"/>
             </connections>
@@ -95,18 +102,56 @@ Please Realign or Press Reset.</string>
                     <color key="textColor" red="0.66666668653488159" green="0.66666668653488159" blue="0.66666668653488159" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                     <nil key="highlightedColor"/>
                 </label>
-                <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="qcn-fe-qe9" userLabel="Button - Diminish">
-                    <rect key="frame" x="660" y="570" width="76" height="34"/>
-                    <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMinY="YES" flexibleMaxY="YES"/>
-                    <color key="backgroundColor" red="0.48046722467373393" green="0.89872680332572075" blue="0.97314200129533679" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
-                    <fontDescription key="fontDescription" type="boldSystem" pointSize="18"/>
-                    <state key="normal" title="Diminish">
-                        <color key="titleColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
-                    </state>
+                <imageView userInteractionEnabled="NO" contentMode="scaleToFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="bGe-MV-XyZ">
+                    <rect key="frame" x="288" y="0.0" width="480" height="320"/>
+                    <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxY="YES"/>
+                </imageView>
+                <imageView userInteractionEnabled="NO" contentMode="scaleToFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="KN1-9f-J1f">
+                    <rect key="frame" x="0.0" y="0.0" width="768" height="1024"/>
+                    <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                </imageView>
+                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" fixedFrame="YES" text="showMeshOnly" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="8hH-mX-stl">
+                    <rect key="frame" x="11" y="11" width="159" height="21"/>
+                    <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                    <color key="textColor" cocoaTouchSystemColor="lightTextColor"/>
+                    <nil key="highlightedColor"/>
+                </label>
+                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" fixedFrame="YES" text="ColorDetection" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="NN0-c4-c9m">
+                    <rect key="frame" x="178" y="11" width="116" height="21"/>
+                    <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                    <color key="textColor" white="1" alpha="0.59999999999999998" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                    <nil key="highlightedColor"/>
+                </label>
+                <switch opaque="NO" contentMode="scaleToFill" horizontalHuggingPriority="750" verticalHuggingPriority="750" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" translatesAutoresizingMaskIntoConstraints="NO" id="XFz-AP-uWd">
+                    <rect key="frame" x="47" y="32" width="49" height="31"/>
+                    <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
                     <connections>
-                        <action selector="diminishButtonPressed:" destination="-1" eventType="touchUpInside" id="dFl-gD-9Ia"/>
+                        <action selector="switch1StateChange:" destination="-1" eventType="valueChanged" id="3BX-Tp-P7S"/>
                     </connections>
-                </button>
+                </switch>
+                <switch opaque="NO" contentMode="scaleToFill" horizontalHuggingPriority="750" verticalHuggingPriority="750" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" translatesAutoresizingMaskIntoConstraints="NO" id="WkJ-zf-beY">
+                    <rect key="frame" x="213" y="32" width="49" height="31"/>
+                    <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                    <connections>
+                        <action selector="switch2StateChange:" destination="-1" eventType="valueChanged" id="w4K-c6-8QI"/>
+                    </connections>
+                </switch>
+                <switch opaque="NO" contentMode="scaleToFill" horizontalHuggingPriority="750" verticalHuggingPriority="750" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" translatesAutoresizingMaskIntoConstraints="NO" id="ZOQ-0J-wD0">
+                    <rect key="frame" x="360" y="32" width="49" height="31"/>
+                    <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                    <connections>
+                        <action selector="switch3StateChange:" destination="-1" eventType="valueChanged" id="6E7-6i-oLD"/>
+                    </connections>
+                </switch>
+                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" fixedFrame="YES" text="enable Fullscreen" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="c6t-h9-3Ez">
+                    <rect key="frame" x="316" y="11" width="134" height="21"/>
+                    <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                    <color key="textColor" cocoaTouchSystemColor="lightTextColor"/>
+                    <nil key="highlightedColor"/>
+                </label>
             </subviews>
             <color key="backgroundColor" red="1" green="1" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
             <gestureRecognizers/>
@@ -130,6 +175,7 @@ Please Realign or Press Reset.</string>
                 <constraint firstItem="hrg-ff-rIb" firstAttribute="centerX" secondItem="Y9C-vE-QSA" secondAttribute="centerX" id="xfm-ef-jal"/>
             </constraints>
             <nil key="simulatedStatusBarMetrics"/>
+            <point key="canvasLocation" x="19.53125" y="29.882812499999996"/>
         </view>
     </objects>
     <resources>

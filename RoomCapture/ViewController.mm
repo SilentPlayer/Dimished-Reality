@@ -9,7 +9,8 @@
 #import "ViewController+OpenGL.h"
 #import "ViewController+Sensor.h"
 #import "ViewController+SLAM.h"
-#import "MeshRenderer.h"
+#import "ObjectDetection.h"
+#import "EAGLView.h"
 
 #import <Structure/Structure.h>
 #import <Structure/StructureSLAM.h>
@@ -17,6 +18,8 @@
 #import "CustomUIKitStyles.h"
 
 #include <cmath>
+
+bool dmished = false;
 
 @implementation ViewController
 
@@ -39,13 +42,13 @@
 
 - (void)viewDidLoad
 {
+    _cdect = [[ObjectDetection alloc] init];
+    
     [super viewDidLoad];
     
     [self setupGL];
     
     [self setupUserInterface];
-    
-    [self setupMeshViewController];
     
     [self setupIMU];
     
@@ -86,7 +89,7 @@
     
     // Abort the current scan if we were still scanning before going into background since we
     // are not likely to recover well.
-    if (_slamState.roomCaptureState == RoomCaptureStateScanning)
+    if (_slamState.appState == StateScanning)
     {
         [self resetButtonPressed:self];
     }
@@ -103,7 +106,14 @@
     [[UIApplication sharedApplication] setStatusBarHidden:YES withAnimation:UIStatusBarAnimationSlide];
     
     // make round button
-    self.diminishButton.layer.cornerRadius = 5.0;
+    //self.showImageButton.layer.cornerRadius = 5.0;
+    
+    _switch1.hidden = YES;
+    _switch2.hidden = YES;
+    _switch3.hidden = YES;
+    _switch1Label.hidden = YES;
+    _switch2Label.hidden = YES;
+    _switch3Label.hidden = YES;
     
     // Fully transparent message label, initially.
     self.appStatusMessageLabel.alpha = 0;
@@ -124,6 +134,9 @@
     self.roomSizeLabel.hidden = true;
     
     _calibrationOverlay = nil;
+    
+    UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:@"Welcome to Diminished Room Reality!" message:@"First scan your room, after that you can make objects disappear, either faces or green colored objects!" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+    [alertView show];
 }
 
 // Make sure the status bar is disabled (iOS 7+)
@@ -132,21 +145,12 @@
     return YES;
 }
 
-- (void)setupMeshViewController
-{
-    // The mesh viewer will be used after scanning.
-    _meshViewController = [MeshViewController viewController];
-    _meshViewController.delegate = self;
-    _meshViewNavigationController = [[UINavigationController alloc] initWithRootViewController:_meshViewController];
-}
-
 - (void)enterPoseInitializationState
 {
     // Switch to the Scan button.
     self.scanButton.hidden = NO;
     self.doneButton.hidden = YES;
     self.resetButton.hidden = YES;
-    self.diminishButton.hidden = YES;
     
     // Show the room size controls.
     self.roomSizeSlider.hidden = NO;
@@ -157,7 +161,7 @@
     // We leave exposure unlock during init.
     [self setColorCameraParametersForInit];
     
-    _slamState.roomCaptureState = RoomCaptureStatePoseInitialization;
+    _slamState.appState = StatePoseInitialization;
     
     [self updateIdleTimer];
 }
@@ -168,7 +172,6 @@
     self.scanButton.hidden = YES;
     self.doneButton.hidden = NO;
     self.resetButton.hidden = NO;
-    self.diminishButton.hidden = NO;
     
     // Hide the room size controls.
     self.roomSizeLabel.hidden = YES;
@@ -183,7 +186,7 @@
     // We will lock exposure during scanning to ensure better coloring.
     [self setColorCameraParametersForScanning];
     
-    _slamState.roomCaptureState = RoomCaptureStateScanning;
+    _slamState.appState = StateScanning;
 }
 
 // gets triggered by diminish button
@@ -196,7 +199,9 @@
     self.scanButton.hidden = YES;
     self.doneButton.hidden = YES;
     self.resetButton.hidden = YES;
-    self.diminishButton.hidden = YES;
+    
+    // save lastPose before stopping the sensors
+    _slamState.lastPose = [_slamState.tracker lastFrameCameraPose];
     
     // Stop the sensors, we don't need them.
     [_sensorController stopStreaming];
@@ -205,30 +210,7 @@
     // Tell the mapper to compute a final triangle mesh from its data. Will also stop background processing.
     [_slamState.mapper finalizeTriangleMesh];
     
-    _slamState.roomCaptureState = RoomCaptureDiminish;
-    
-    // Colorize the mesh in a background queue.
-    [self colorizeMeshInBackground];
-}
-
-- (void)enterFinalizingState
-{
-    // Cannot be lost if not scanning anymore.
-    [self hideTrackingErrorMessage];
-    
-    // Hide the Scan/Done/Reset button.
-    self.scanButton.hidden = YES;
-    self.doneButton.hidden = YES;
-    self.resetButton.hidden = YES;
-    
-    // Stop the sensors, we don't need them.
-    [_sensorController stopStreaming];
-    [self stopColorCamera];
-    
-    // Tell the mapper to compute a final triangle mesh from its data. Will also stop background processing.
-    [_slamState.mapper finalizeTriangleMesh];
-    
-    _slamState.roomCaptureState = RoomCaptureStateFinalizing;
+    _slamState.appState = StateDiminish;
     
     // Colorize the mesh in a background queue.
     [self colorizeMeshInBackground];
@@ -258,12 +240,7 @@
                                               _appStatus.backgroundProcessingStatus = AppStatus::BackgroundProcessingStatusIdle;
                                               _appStatus.statusMessageDisabled = true;
                                               [self updateAppStatusMessage];
-                                              if (_slamState.roomCaptureState == RoomCaptureStateScanning) {
-                                                  [self enterViewingState];
-                                              }
-                                              else {
-                                                  [self initializeDiminishedState];
-                                              }
+                                              [self initializeDiminishedState];
                                               
                                           });
                                       }
@@ -271,13 +248,65 @@
                                       error:nil];
     
     [colorizeTask start];
+    
+}
+
+-(void) fillHoles{
+    STMesh* sceneMesh = [_slamState.scene lockAndGetSceneMesh];
+    STMesh* sceneMeshCopy = [[STMesh alloc] initWithMesh:sceneMesh];
+    [_slamState.scene unlockSceneMesh];
+    
+    _appStatus.backgroundProcessingStatus = AppStatus::BackgroundProcessingStatusFinalizing;
+    [self updateAppStatusMessage];
+    
+    STBackgroundTask* holeFillingTask = [STMesh newFillHolesTaskWithMesh:sceneMeshCopy completionHandler:^(STMesh* result, NSError *error) {
+        
+        _holeFilledMesh = result;
+        
+        _holeFillingTask = nil;
+        
+        // Now colorize the hole filled mesh.
+        STBackgroundTask* colorizeTask = [STColorizer
+                                          newColorizeTaskWithMesh:_holeFilledMesh
+                                          scene:_slamState.scene
+                                          keyframes:[_slamState.keyFrameManager getKeyFrames]
+                                          completionHandler:^(NSError *error)
+                                          {
+                                              dispatch_async(dispatch_get_main_queue(), ^{
+                                                  _colorizeTask = nil; // release the handle on the completed task.
+                                                  _appStatus.backgroundProcessingStatus = AppStatus::BackgroundProcessingStatusIdle;
+                                                  _appStatus.statusMessageDisabled = true;
+                                                  [self updateAppStatusMessage];
+                                                  [self initializeDiminishedState];
+                                              });
+                                              
+                                          }
+                                          options:@{kSTColorizerTypeKey: @(STColorizerTextureMapForRoom) }
+                                          error:nil];
+        _colorizeTask = colorizeTask;
+        _colorizeTask.delegate = self;
+        [_colorizeTask start];
+        
+        
+    }];
+    
+    // Keep a reference so we can monitor progress
+    _holeFillingTask = holeFillingTask;
+    _holeFillingTask.delegate = self;
+    
+    [_holeFillingTask start];
+    
 }
 
 - (void) initializeDiminishedState
 {
-    // reset everything and start streaming again
-    // from meshViewDidDismiss
+    meshRef = [[STMesh alloc] initWithMesh:_colorizedMesh];
+    _meshRenderer = new MeshRenderer;
+    _meshRenderer->initializeGL();
+    _meshRenderer->uploadMesh(meshRef);
     
+    // reset everything and start streaming again
+    _slamState.appState = StateDiminish;
     // Restart the sensor.
     [self connectToStructureSensorAndStartStreaming];
     
@@ -286,39 +315,20 @@
     
     // Reset the tracker, mapper, etc.
     [self resetSLAMKeepMeshes];
-    [self enterPoseInitializationState];
     
-    [self setColorCameraParametersForInit];
-    
-    /*_slamState.roomCaptureState = RoomCaptureStatePoseInitialization;
-    
-    [self updateIdleTimer];
-    
-    // Create a mapper.
-    [self setupMapper];
-    
-    // Set the initial tracker camera pose.
-    _slamState.tracker.initialCameraPose = _slamState.cameraPoseInitializer.cameraPose;
-    
-    // We will lock exposure during scanning to ensure better coloring.
-    [self setColorCameraParametersForScanning];
-    
-    _slamState.roomCaptureState = RoomCaptureStateScanning;*/
-    
-    
-}
+    _slamState.tracker.initialCameraPose = _slamState.lastPose;
 
-- (void)enterViewingState
-{
-    // Place the camera in the center of the scanning volume.
-    GLKVector3 cameraCenter = GLKVector3MultiplyScalar(_slamState.cameraPoseInitializer.volumeSizeInMeters, 0.5);
-    GLKMatrix4 initialCameraPose = GLKMatrix4MakeTranslation(cameraCenter.x, cameraCenter.y, cameraCenter.z);
-    
-    [self presentMeshViewer:_colorizedMesh withCameraPose:initialCameraPose];
-    
-    _slamState.roomCaptureState = RoomCaptureStateViewing;
-    
     [self updateIdleTimer];
+    
+    dmished = true;
+    
+    //self.resetButton.hidden = NO;
+    _switch1.hidden = NO;
+    _switch2.hidden = NO;
+    _switch3.hidden = NO;
+    _switch1Label.hidden = NO;
+    _switch2Label.hidden = NO;
+    _switch3Label.hidden = NO;
 }
 
 - (void)adjustVolumeSize:(GLKVector3)volumeSize
@@ -327,14 +337,12 @@
     _slamState.cameraPoseInitializer.volumeSizeInMeters = volumeSize;
 }
 
-- (void)savePreviewImage:(NSString*)screenshotPath
+- (UIImage *)getMeshImage
 {
-    meshRef = [[STMesh alloc] initWithMesh:_colorizedMesh];
-    _meshRenderer->initializeGL();
-    _meshRenderer->uploadMesh(meshRef);
-    
-    const int width = 320;
-    const int height = 240;
+    NSDate *startM = [NSDate date];
+    // 4:3 resolution
+    const int width = 640;
+    const int height = 480;
     
     GLint currentFrameBuffer;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFrameBuffer);
@@ -363,11 +371,13 @@
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthRenderBuffer);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, outputTexture, 0);
     
+    float fovXRadians = 90.f/350.f * M_PI;
+    float aspectRatio = 4.f/3.f;
+    
     // Take the screenshot from the initial viewpoint, before user interactions.
     bool isInvertible = false;
     GLKMatrix4 modelViewMatrix = GLKMatrix4Invert([_slamState.tracker lastFrameCameraPose], &isInvertible);
-    NSAssert (isInvertible, @"Bad viewpoint.");
-    GLKMatrix4 projectionMatrix = glProjectionMatrixFromPerspective(_cameraFovBeforeUserInteractions, _cameraAspectRatioBeforeUserInteractions);
+    GLKMatrix4 projectionMatrix = [self getCameraGLProjection];
     
     // Keep the current render mode
     MeshRenderer::RenderingMode previousRenderingMode = _meshRenderer->getRenderingMode();
@@ -410,7 +420,21 @@
         memcpy(screenShotDataBottomRow, rowBuffer.data(), width * sizeof (RgbaPixel));
     }
     
-    saveJpegFromRGBABuffer([screenshotPath UTF8String], reinterpret_cast<uint8_t*>(screenShotRgbaBuffer.data()), width, height);
+    CGColorSpaceRef colorSpace;
+    CGImageAlphaInfo alphaInfo;
+    CGContextRef context;
+    
+    colorSpace = CGColorSpaceCreateDeviceRGB();
+    alphaInfo = kCGImageAlphaNoneSkipLast;
+    context = CGBitmapContextCreate(reinterpret_cast<uint8_t*>(screenShotRgbaBuffer.data()), width, height, 8, width * 4, colorSpace, alphaInfo);
+
+    CGImageRef rgbImage = CGBitmapContextCreateImage(context);
+    
+    UIImage *newImage = [UIImage imageWithCGImage:rgbImage];
+    
+    CGImageRelease(rgbImage);
+    CGContextRelease(context);
+    CGColorSpaceRelease(colorSpace);
     
     glBindFramebuffer(GL_FRAMEBUFFER, currentFrameBuffer);
     
@@ -418,22 +442,22 @@
     glDeleteTextures(1, &outputTexture);
     glDeleteFramebuffers(1, &colorFrameBuffer);
     glDeleteRenderbuffers(1, &depthRenderBuffer);
-}
-
--(NSString *)GetDocumentDirectory{
-    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true);
-    NSString *documentPath = [paths objectAtIndex:0];
     
-    return documentPath;
+    NSDate *endM = [NSDate date];
+    NSTimeInterval executionTime = [endM timeIntervalSinceDate:startM];
+    NSLog(@"Meshimage exec Time: %f", executionTime);
+    
+    return newImage;
 }
 
 -(BOOL)currentStateNeedsSensor
 {
-    switch (_slamState.roomCaptureState)
+    switch (_slamState.appState)
     {
             // Initialization and scanning need the sensor.
-        case RoomCaptureStatePoseInitialization:
-        case RoomCaptureStateScanning:
+        case StatePoseInitialization:
+        case StateScanning:
+        case StateDiminish:
             return TRUE;
             
             // Other states don't need the sensor.
@@ -472,15 +496,20 @@
 
 - (void)processDeviceMotion:(CMDeviceMotion *)motion withError:(NSError *)error
 {
-    if (_slamState.roomCaptureState == RoomCaptureStatePoseInitialization)
+    if (_slamState.appState == StatePoseInitialization)
     {
         // Update our gravity vector, it will be used by the cube placement initializer.
         _lastCoreMotionGravity = GLKVector3Make (motion.gravity.x, motion.gravity.y, motion.gravity.z);
     }
     
-    if (_slamState.roomCaptureState == RoomCaptureStatePoseInitialization || _slamState.roomCaptureState == RoomCaptureStateScanning)
+    if (_slamState.appState == StatePoseInitialization || _slamState.appState == StateScanning || _slamState.appState == StateDiminish)
     {
         // The tracker is more robust to fast moves if we feed it with motion data.
+        [_slamState.tracker updateCameraPoseWithMotion:motion];
+    }
+    
+    if (_slamState.appState == StateDiminish)
+    {
         [_slamState.tracker updateCameraPoseWithMotion:motion];
     }
 }
@@ -646,6 +675,7 @@
 
 - (IBAction)scanButtonPressed:(id)sender
 {
+    _colorizedMesh = nil;
     [self enterScanningState];
 }
 
@@ -663,7 +693,7 @@
     // Handles simultaneous press of Done & Reset.
     if(self.doneButton.hidden) return;
     
-    [self enterFinalizingState];
+    [self enterDiminishedState];
 }
 
 - (IBAction)roomSizeSliderTouchDown:(id)sender {
@@ -678,170 +708,61 @@
     self.roomSizeLabel.hidden = YES;
 }
 
-- (IBAction)diminishButtonPressed:(id)sender {
-    [self enterDiminishedState];
+- (IBAction)switch2StateChange:(id)sender {
+    if([_switch2 isOn]){
+        _switch2Label.text = @"FaceDetection";
+    }
+    else{
+        _switch2Label.text = @"ColorDetection";
+    }
+}
+
+- (IBAction)switch1StateChange:(id)sender {
+    if([_switch1 isOn]){
+        _switch1Label.text = @"ObjectDetection";
+    }
+    else{
+        _switch1Label.text = @"ShowMeshOnly";
+    }
+}
+
+- (IBAction)switch3StateChange:(id)sender {
+    if([_switch3 isOn]){
+        _imageView1.image = NULL;
+    }
+    else {
+        _imageView2.image = NULL;
+    }
+}
+
+-(void) setViewImage: (UIImage *) image
+{
+    if([_switch3 isOn]){
+        _imageView2.image = image;
+    }
+    else{
+        _imageView1.image = image;
+    }
+}
+
+
+
+-(bool) isStateDiminish
+{
+    return dmished;
+}
+
+-(bool) switch1State
+{
+    return [_switch1 isOn];
+}
+
+-(bool) switch2State
+{
+    return [_switch2 isOn];
 }
 
 #pragma mark - MeshViewController delegates
 
-- (void)presentMeshViewer:(STMesh *)mesh withCameraPose:(GLKMatrix4)cameraPose
-{
-    [(EAGLView *)_meshViewController.view setContext:_display.context];
-    [EAGLContext setCurrentContext:_display.context];
-    
-    // Horizontal field of view.
-    float fovXRadians = 90.f/180.f * M_PI;
-    float aspectRatio = 4.f/3.f;
-    
-    if (mesh)
-    {
-        [_meshViewController uploadMesh:mesh];
-    }
-    else
-    {
-        NSLog(@"Error: no mesh!");
-    }
-    [_meshViewController setHorizontalFieldOfView:fovXRadians aspectRatio:aspectRatio];
-    [_meshViewController setCameraPose:cameraPose];
-    
-    [self presentViewController:_meshViewNavigationController animated:YES completion:^{}];
-}
 
-- (void)meshViewWillDismiss
-{
-    [_meshViewController hideMeshViewerMessage:_meshViewController.meshViewerMessageLabel];
-    
-    // Make sure we don't keep background task running.
-    if (_holeFillingTask)
-    {
-        [_holeFillingTask cancel];
-        _holeFillingTask = nil;
-    }
-    if (_colorizeTask)
-    {
-        [_colorizeTask cancel];
-        _colorizeTask = nil;
-    }
-}
-
-- (void)meshViewDidDismiss
-{
-    // Restart the sensor.
-    [self connectToStructureSensorAndStartStreaming];
-    
-    _appStatus.statusMessageDisabled = false;
-    [self updateAppStatusMessage];
-    
-    // Reset the tracker, mapper, etc.
-    [self resetSLAM];
-    [self enterPoseInitializationState];
-}
-
-- (void)meshViewDidRequestHoleFilling
-{
-    if (_holeFilledMesh)
-    {
-        // If already available, just re-upload it.
-        [_meshViewController uploadMesh:_holeFilledMesh];
-    }
-    else
-    {
-        // Otherwise compute it now.
-        [_meshViewController.holeFillingSwitch setEnabled:NO];
-        [self startHoleFillingAndColorizingTasks];
-    }
-}
-
-- (void)meshViewDidRequestRegularMesh
-{
-    [_meshViewController uploadMesh:_colorizedMesh];
-}
-
--(void) backgroundTask:(STBackgroundTask*)sender didUpdateProgress:(double)progress
-{
-    if(sender == _holeFillingTask)
-    {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [_meshViewController showMeshViewerMessage:_meshViewController.meshViewerMessageLabel msg:[NSString stringWithFormat:@"Hole filling: % 3d%%", int(progress*80)]];
-        });
-    }
-    else if(sender == _colorizeTask)
-    {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [_meshViewController showMeshViewerMessage:_meshViewController.meshViewerMessageLabel msg:[NSString stringWithFormat:@"Coloring Mesh: % 3d%%", int(progress*20)+80]];
-        });
-    }
-}
-
-
-- (void)startHoleFillingAndColorizingTasks
-{
-    // Safely copy the scene mesh so we can operate on it while it is being used for rendering.
-    STMesh* sceneMesh = [_slamState.scene lockAndGetSceneMesh];
-    STMesh* sceneMeshCopy = [[STMesh alloc] initWithMesh:sceneMesh];
-    [_slamState.scene unlockSceneMesh];
-    
-    // If an old task is still running, wait until it completes.
-    if (_holeFillingTask)
-    {
-        [_holeFillingTask waitUntilCompletion];
-        _holeFillingTask = nil;
-    }
-    
-    STBackgroundTask* holeFillingTask = [STMesh newFillHolesTaskWithMesh:sceneMeshCopy completionHandler:^(STMesh* result, NSError *error) {
-        
-        // We must execute on main thread to check if the operation was canceled right before completion.
-        dispatch_async(dispatch_get_main_queue(), ^{
-            
-            _holeFilledMesh = result;
-            
-            if (_holeFillingTask.isCancelled)
-            {
-                // If we reach this point, it means the task was cancelled after we already had the result ready.
-                NSLog(@"Error! %s", [[error localizedDescription] UTF8String]);
-                return;
-            }
-            
-            // Release the handle on the completed task.
-            _holeFillingTask = nil;
-            
-            // Now colorize the hole filled mesh.
-            STBackgroundTask* colorizeTask = [STColorizer
-                                              newColorizeTaskWithMesh:_holeFilledMesh
-                                              scene:_slamState.scene
-                                              keyframes:[_slamState.keyFrameManager getKeyFrames]
-                                              completionHandler:^(NSError *error)
-                                              {
-                                                  if (error == nil)
-                                                  {
-                                                      [self performSelectorOnMainThread:@selector(holeFillingDone) withObject:nil waitUntilDone:NO];
-                                                  }
-                                                  else
-                                                  {
-                                                      NSLog(@"Error! %s", [[error localizedDescription] UTF8String]);
-                                                  }
-                                                  
-                                                  _colorizeTask = nil; // release the handle on the completed task.
-                                              }
-                                              options:@{kSTColorizerTypeKey: @(STColorizerTextureMapForRoom) }
-                                              error:nil];
-            _colorizeTask = colorizeTask;
-            _colorizeTask.delegate = self;
-            [_colorizeTask start];
-        });
-    }];
-    
-    // Keep a reference so we can monitor progress
-    _holeFillingTask = holeFillingTask;
-    _holeFillingTask.delegate = self;
-    
-    [_holeFillingTask start];
-}
-
-- (void)holeFillingDone
-{
-    [_meshViewController uploadMesh:_holeFilledMesh];
-    [_meshViewController hideMeshViewerMessage:_meshViewController.meshViewerMessageLabel];
-    [_meshViewController.holeFillingSwitch setEnabled:YES];
-}
 @end

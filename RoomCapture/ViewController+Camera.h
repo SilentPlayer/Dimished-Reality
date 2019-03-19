@@ -12,13 +12,12 @@
 #import <Structure/Structure.h>
 #import <Structure/StructureSLAM.h>
 
-#import "MeshViewController.h"
-
 @interface ViewController (Camera) <AVCaptureVideoDataOutputSampleBufferDelegate>
 
 - (void)startColorCamera;
 - (void)stopColorCamera;
 - (void)setColorCameraParametersForInit;
 - (void)setColorCameraParametersForScanning;
+- (UIImage *) getLastOut;
 
 @end

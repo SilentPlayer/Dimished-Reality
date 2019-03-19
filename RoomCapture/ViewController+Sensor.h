@@ -12,8 +12,6 @@
 #import <Structure/Structure.h>
 #import <Structure/StructureSLAM.h>
 
-#import "MeshViewController.h"
-
 @interface ViewController (Sensor) <STSensorControllerDelegate>
 
 - (STSensorControllerInitStatus)connectToStructureSensorAndStartStreaming;

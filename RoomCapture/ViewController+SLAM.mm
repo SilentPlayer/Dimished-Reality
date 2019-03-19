@@ -61,8 +61,10 @@ namespace // anonymous namespace for local functions
     NSDictionary* trackerOptions = @{
                                      kSTTrackerTypeKey: @(STTrackerDepthAndColorBased),
                                      kSTTrackerSceneTypeKey: @(STTrackerSceneTypeRoom),
-                                     kSTTrackerTrackAgainstModelKey: @NO, // Tracking against model works better in smaller scale scanning.
+                                     kSTTrackerTrackAgainstModelKey: @YES, // Tracking against model works better in smaller scale scanning.
                                      kSTTrackerQualityKey: @(STTrackerQualityAccurate),
+                                     kSTTrackerBackgroundProcessingEnabledKey: @YES,
+                                     kSTTrackerAcceptVaryingColorExposureKey: @YES,
                                      };
     
     // Initialize the camera pose tracker.
@@ -165,9 +167,9 @@ namespace // anonymous namespace for local functions
     if (colorFrame != nil)
         [self uploadGLColorTexture:colorFrame];
     
-    switch (_slamState.roomCaptureState)
+    switch (_slamState.appState)
     {
-        case RoomCaptureStatePoseInitialization:
+        case StatePoseInitialization:
         {
             // Estimate the new scanning volume position as soon as gravity has an estimate.
             if (GLKVector3Length(_lastCoreMotionGravity) > 1e-5f)
@@ -179,7 +181,7 @@ namespace // anonymous namespace for local functions
             break;
         }
             
-        case RoomCaptureStateScanning:
+        case StateScanning:
         {
             GLKMatrix4 depthCameraPoseBeforeTracking = [_slamState.tracker lastFrameCameraPose];
             
@@ -194,7 +196,6 @@ namespace // anonymous namespace for local functions
             BOOL trackingOk = [_slamState.tracker updateCameraPoseWithDepthFrame:depthFrame colorFrame:colorFrame error:&trackingError];
             
             NSLog(@"[Structure] STTracker Error: %@.", [trackingError localizedDescription]);
-            trackingMessage = [trackingError localizedDescription];
             
             if (trackingOk)
             {
@@ -304,8 +305,81 @@ namespace // anonymous namespace for local functions
             }
             break;
         }
+        case StateDiminish:
+        {
+            GLKMatrix4 depthCameraPoseBeforeTracking = [_slamState.tracker lastFrameCameraPose];
             
-        case RoomCaptureStateViewing:
+            NSError* trackingError = nil;
+            NSString* trackingMessage = nil;
+            
+            // Reset previous tracker or keyframe messages, they are now obsolete.
+            NSString* trackerErrorMessage = nil;
+            NSString* keyframeErrorMessage = nil;
+            
+            // Estimate the new camera pose.
+            BOOL trackingOk = [_slamState.tracker updateCameraPoseWithDepthFrame:depthFrame colorFrame:colorFrame error:&trackingError];
+            
+            NSLog(@"[Structure] STTracker Error: %@.", [trackingError localizedDescription]);
+            
+            if (trackingOk)
+            {
+                // Integrate it to update the current mesh estimate.
+                GLKMatrix4 depthCameraPoseAfterTracking = [_slamState.tracker lastFrameCameraPose];
+                [_slamState.mapper integrateDepthFrame:depthFrame cameraPose:depthCameraPoseAfterTracking];
+                
+                // Make sure the pose is in color camera coordinates in case we are not using registered depth.
+                GLKMatrix4 colorCameraPoseInDepthCoordinateSpace;
+                [depthFrame colorCameraPoseInDepthCoordinateFrame:colorCameraPoseInDepthCoordinateSpace.m];
+                GLKMatrix4 colorCameraPoseAfterTracking = GLKMatrix4Multiply(depthCameraPoseAfterTracking,
+                                                                             colorCameraPoseInDepthCoordinateSpace);
+                
+                bool showHoldDeviceStill = false;
+                
+                // Compute the translation difference between the initial camera pose and the current one.
+                GLKMatrix4 initialPose = _slamState.tracker.initialCameraPose;
+                float deltaTranslation = GLKVector4Distance(GLKMatrix4GetColumn(depthCameraPoseAfterTracking, 3), GLKMatrix4GetColumn(initialPose, 3));
+                
+                // Show some messages if needed.
+                if (showHoldDeviceStill)
+                {
+                    [self showTrackingMessage:@"Please hold still so we can capture a keyframe..."];
+                }
+                else if (deltaTranslation > _options.maxDistanceFromInitialPositionInMeters )
+                {
+                    // Warn the user if he's exploring too far away since this demo is optimized for a rotation around oneself.
+                    [self showTrackingMessage:@"Please stay closer to the initial position."];
+                }
+                else
+                {
+                    [self hideTrackingErrorMessage];
+                }
+            }
+            else
+            {
+                // Update the tracker message if there is any important feedback.
+                trackerErrorMessage = computeTrackerMessage(_slamState.tracker.trackerHints);
+                
+                // Integrate the depth frame if the pose accuracy is great.
+                if (_slamState.tracker.poseAccuracy >= STTrackerPoseAccuracyHigh)
+                {
+                    [_slamState.mapper integrateDepthFrame:depthFrame cameraPose:_slamState.tracker.lastFrameCameraPose];
+                }
+            }
+            
+            if (trackerErrorMessage)
+            {
+                [self showTrackingMessage:trackerErrorMessage];
+            }
+            else if (keyframeErrorMessage)
+            {
+                [self showTrackingMessage:keyframeErrorMessage];
+            }
+            else
+            {
+                [self hideTrackingErrorMessage];
+            }
+            break;
+        }
         default:
         {} // do nothing, the MeshViewController will take care of this.
     }
